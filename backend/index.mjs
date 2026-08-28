@@ -2,7 +2,7 @@
 // Runtime: Node.js 18.x or later (AWS SDK v3 is bundled in the Lambda runtime)
 //
 // Flow: static site POSTs JSON -> this Lambda -> publishes to an SNS topic
-// -> your subscribed email/SMS/etc. gets notified. No database involved.
+// -> your subscribed email gets notified. No database involved.
 
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
@@ -52,36 +52,6 @@ function respond(statusCode, body, requestOrigin) {
 
 function escapeForNotification(value) {
   return String(value).slice(0, 5000);
-}
-
-// Hard ceiling on the SMS body. GSM-7 packs 160 characters into a billable
-// segment, so 300 is two segments — enough for contact details plus a useful
-// slice of the message, without a long submission running up a bill.
-const SMS_MAX_CHARS = Number(process.env.SMS_MAX_CHARS || "300");
-
-// Characters outside the GSM-7 alphabet (emoji, curly quotes, em dashes)
-// force the whole message into UCS-2, which drops the segment size from 160
-// to 70 — more than doubling the cost. Fold the common ones back to ASCII.
-function toGsmSafe(value) {
-  return String(value)
-    .replace(/[‘’‚′]/g, "'")
-    .replace(/[“”„″]/g, '"')
-    .replace(/[–—−]/g, "-")
-    .replace(/…/g, "...")
-    .replace(/ /g, " ")
-    // Anything still non-GSM gets dropped rather than silently doubling cost.
-    .replace(/[^\x20-\x7E\n\r@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉÄÖÑÜ§¿äöñüà]/g, "");
-}
-
-function buildSmsText({ email, phone, message }) {
-  const header = `chisl inquiry\n${toGsmSafe(email)}\n${toGsmSafe(phone)}\n`;
-  const room = SMS_MAX_CHARS - header.length;
-
-  // Collapse newlines so the body doesn't burn segment space on formatting.
-  const body = toGsmSafe(message).replace(/\s+/g, " ").trim();
-
-  if (room <= 0) return header.slice(0, SMS_MAX_CHARS);
-  return header + (body.length > room ? body.slice(0, Math.max(0, room - 3)) + "..." : body);
 }
 
 // Verifies a reCAPTCHA v3 token with Google. Node 18+ Lambda runtimes
@@ -172,28 +142,12 @@ export const handler = async (event) => {
     escapeForNotification(message),
   ].join("\n");
 
-  // SMS is billed per 160-character segment, so the text subscribers get is
-  // capped rather than carrying the full (up to 5000-char) message body.
-  const smsText = buildSmsText({ email, phone, message });
-
   try {
     await sns.send(
       new PublishCommand({
         TopicArn: TOPIC_ARN,
         Subject: `New inquiry from ${String(name).slice(0, 80)}`,
-        // Per-protocol payloads: email gets the full submission, SMS gets the
-        // trimmed version. "default" covers any other subscriber type.
-        MessageStructure: "json",
-        Message: JSON.stringify({
-          default: messageText,
-          email: messageText,
-          sms: smsText,
-        }),
-        MessageAttributes: {
-          // Transactional prioritises delivery over cost — right for an
-          // inquiry alert, and it bypasses promotional-message filtering.
-          "AWS.SNS.SMS.SMSType": { DataType: "String", StringValue: "Transactional" },
-        },
+        Message: messageText,
       })
     );
     return respond(200, { ok: true }, origin);

@@ -2,20 +2,26 @@
 
 A single Lambda function behind an API Gateway HTTP API. The static site POSTs
 the contact form as JSON, the function verifies the reCAPTCHA token and
-publishes the submission to an SNS topic, and SNS fans it out to email and SMS.
+publishes the submission to an SNS topic, and SNS delivers it by email.
 No database, no server.
 
 Cost at low volume is effectively zero: Lambda's free tier covers a million
 requests a month, API Gateway is ~$1 per million, and SNS email is free for the
-first thousand. SMS is the only real line item — see the note in step 1.
+first thousand.
 
 ```
-                                                    ┌──▶ email (full submission)
-browser ──POST──▶ API Gateway ──▶ Lambda ──▶ SNS ───┤
-                                    │               └──▶ SMS (capped, 2 segments)
+browser ──POST──▶ API Gateway ──▶ Lambda ──▶ SNS ──▶ email (full submission)
                                     │
                                     └──▶ Google reCAPTCHA (verify, server-side)
 ```
+
+> **SMS was removed deliberately.** UK carriers only accept alphanumeric sender
+> IDs that are registered with them, the account's sender ID is unregistered,
+> and there is no origination number to fall back on — so every text failed at
+> the network with a 0% delivery rate while email was unaffected. Fixing it
+> needs a sender ID registration *and* an AWS Support case to leave the SMS
+> sandbox and lift the $1 monthly spend cap. Not worth it for a contact form;
+> a Telegram or Pushover webhook is the cheaper route to a phone alert.
 
 ## What you need before starting
 
@@ -25,6 +31,36 @@ browser ──POST──▶ API Gateway ──▶ Lambda ──▶ SNS ───
 
 Everything below uses `eu-west-2`. Swap in another region if you prefer — just
 keep it consistent, and remember the API endpoint will carry that region.
+
+## Which AWS account this lives in
+
+The stack is deployed in a dedicated chisl AWS account, in `eu-west-2`. Two
+local CLI profiles reach it:
+
+| Profile | Identity | Use for |
+| --- | --- | --- |
+| `chisl` | `chisl-deploy` IAM user | day-to-day deploys — the default |
+| `styx` | account root | account-level SNS settings the deploy user can't touch |
+
+Commands below assume one of them: add `--profile chisl`, or
+`export AWS_PROFILE=chisl` once per shell. Without it the CLI uses your
+`default` profile, which is a **different account entirely** — you'll get
+`Topic does not exist` or `Function not found` and waste an hour on it.
+
+The account ID isn't written down here, because this repo is public. Resolve it
+when a command needs one:
+
+```bash
+export ACCOUNT_ID=$(aws sts get-caller-identity --profile chisl --query Account --output text)
+```
+
+Every `YOUR-ACCOUNT-ID` below takes that value.
+
+> **`chisl-deploy` can't read the Lambda's environment variables.** It's denied
+> `kms:Decrypt` on the key they're encrypted with, so
+> `get-function-configuration --query 'Environment.Variables'` returns `null`
+> instead of an error — which looks exactly like a missing `TOPIC_ARN`. Use
+> `--profile styx` when you need to actually see them.
 
 ## 1. Create the SNS topic and subscribe to it
 
@@ -45,32 +81,6 @@ aws sns subscribe \
 
 AWS sends a confirmation email. **Click the confirm link** — until you do, the
 subscription stays pending and messages go nowhere.
-
-### SMS
-
-```bash
-aws sns subscribe \
-  --topic-arn arn:aws:sns:eu-west-2:YOUR-ACCOUNT-ID:chisl-contact \
-  --protocol sms \
-  --notification-endpoint +447700900123 \
-  --region eu-west-2
-```
-
-Two things gate SMS:
-
-- **The SMS sandbox.** New accounts start in it, and it only delivers to
-  verified numbers. That's fine here — you're only ever texting yourself.
-  Register the number with `aws sns create-sms-sandbox-phone-number`, then
-  confirm the OTP with `aws sns verify-sms-sandbox-phone-number`. Check which
-  state you're in with `aws sns get-sms-sandbox-account-status`.
-- **The monthly spend limit**, `MonthlySpendLimit`, defaults to **$1**. At UK
-  transactional rates (~$0.03/segment) and a 2-segment cap that's roughly 16
-  inquiries a month, after which **SMS silently stops while email keeps
-  working**. Raising it above $1 needs an AWS Support request.
-
-```bash
-aws sns get-sms-attributes --region eu-west-2   # check the current limit
-```
 
 ## 2. Get reCAPTCHA v3 keys
 
@@ -159,7 +169,6 @@ aws lambda update-function-configuration \
 | `RECAPTCHA_SECRET` | no, but strongly recommended | If unset, the spam check is skipped entirely and every submission publishes. |
 | `RECAPTCHA_MIN_SCORE` | no | Defaults to `0.5`. Lower catches fewer bots; higher rejects more real people. |
 | `ALLOWED_ORIGIN` | no | Comma-separated allowlist. Defaults to `*` (any site). Currently `https://chisl.io,https://styxofdynamite.github.io`. |
-| `SMS_MAX_CHARS` | no | Defaults to `300` — two billable SMS segments. The SMS carries email, phone, and a truncated message body; the full text goes to email subscribers. |
 
 ## 5. Put an HTTP API in front of it
 
@@ -207,13 +216,18 @@ origins are controlled.
 
 ## 6. Wire the site to it
 
-| File | Value | Status |
-| --- | --- | --- |
-| `site/js/contact.js` | `ENDPOINT` | ✅ set to the API endpoint above |
-| `site/js/contact.js` | `RECAPTCHA_SITE_KEY` | ❌ still the placeholder |
-| `site/index.html` | the `recaptcha/api.js` script tag | ❌ still the placeholder |
+Three values on the site side have to match what you created above. All three
+are set — this is the list to check if the form ever stops working:
 
-Commit and push — the Pages workflow redeploys the site automatically.
+| File | Value |
+| --- | --- |
+| `site/js/contact.js` | `ENDPOINT` — the API endpoint above |
+| `site/js/contact.js` | `RECAPTCHA_SITE_KEY` — the **site** key, the public half |
+| `site/index.html` | the `recaptcha/api.js` script tag — same site key again |
+
+The site key appears twice and the two must agree; a mismatch fails as a
+low score rather than an obvious error. Commit and push — the Pages workflow
+redeploys the site automatically.
 
 ## 7. Test it
 
@@ -251,4 +265,8 @@ aws lambda update-function-code \
   the site key and secret key are from different reCAPTCHA registrations.
 - **502 "Could not send notification"** — the role can't publish. Check the
   topic ARN in the inline policy matches `TOPIC_ARN`.
+- **`Topic does not exist` / `Function not found`** — you're on the wrong
+  profile. See [Which AWS account this lives in](#which-aws-account-this-lives-in).
+- **`Environment.Variables` comes back `null`** — not a missing config. The
+  `chisl-deploy` user can't decrypt them; re-run with `--profile styx`.
 - **Anything else** — `aws logs tail /aws/lambda/chisl-contact --follow --region eu-west-2`.
