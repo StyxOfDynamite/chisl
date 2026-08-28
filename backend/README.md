@@ -128,53 +128,71 @@ aws lambda update-function-configuration \
 | `TOPIC_ARN` | yes | Without it the function returns 500. |
 | `RECAPTCHA_SECRET` | no, but strongly recommended | If unset, the spam check is skipped entirely and every submission publishes. |
 | `RECAPTCHA_MIN_SCORE` | no | Defaults to `0.5`. Lower catches fewer bots; higher rejects more real people. |
-| `ALLOWED_ORIGIN` | no | Defaults to `*`, which lets any site POST to your function. Set it to `https://chisl.io`. |
+| `ALLOWED_ORIGIN` | no | Comma-separated allowlist. Defaults to `*` (any site). Currently `https://chisl.io,https://styxofdynamite.github.io`. |
+| `SMS_MAX_CHARS` | no | Defaults to `300` — two billable SMS segments. The SMS carries email, phone, and a truncated message body; the full text goes to email subscribers. |
 
-## 5. Create the Function URL
+## 5. Put an HTTP API in front of it
+
+> **Why not a Lambda Function URL?** The obvious route is a Function URL with
+> `--auth-type NONE`. On this AWS account that does not work: the URL returns
+> `403 AccessDeniedException` to anonymous callers even with a textbook
+> `Principal: "*"` resource policy attached. The same URL switched to
+> `AWS_IAM` and called with SigV4 returns `200` — so the function is fine and
+> something at the account level is refusing to honour public invocation.
+> API Gateway sidesteps it: it invokes Lambda under its own service
+> principal, so no public grant on the function is needed.
 
 ```bash
-aws lambda create-function-url-config \
-  --function-name chisl-contact \
-  --auth-type NONE \
-  --region eu-west-2
+LAMBDA_ARN=arn:aws:lambda:eu-west-2:YOUR-ACCOUNT-ID:function:chisl-contact
+
+API_ID=$(aws apigatewayv2 create-api \
+  --name chisl-contact-api \
+  --protocol-type HTTP \
+  --target "$LAMBDA_ARN" \
+  --region eu-west-2 \
+  --output text --query ApiId)
 
 aws lambda add-permission \
   --function-name chisl-contact \
-  --statement-id public-function-url \
-  --action lambda:InvokeFunctionUrl \
-  --principal "*" \
-  --function-url-auth-type NONE \
+  --statement-id apigw-invoke \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:eu-west-2:YOUR-ACCOUNT-ID:${API_ID}/*/*" \
   --region eu-west-2
+
+aws apigatewayv2 get-api --api-id "$API_ID" --region eu-west-2 \
+  --output text --query ApiEndpoint
 ```
 
-The first command prints a `FunctionUrl` like
-`https://abc123....lambda-url.eu-west-2.on.aws/`. That's the endpoint the site
-needs.
+`create-api --target` quick-creates an `ANY /` route wired to the function on
+payload format 2.0, auto-deployed to the `$default` stage — so the endpoint
+needs no stage path. The `--source-arn` on the permission scopes invocation to
+this one API rather than any API in the account.
 
-`--auth-type NONE` makes the URL publicly callable — which it has to be, since
-anonymous visitors submit the form. reCAPTCHA is what stands between that URL
-and abuse, so don't leave `RECAPTCHA_SECRET` unset.
+CORS is handled in `index.mjs`, not on the API, so preflight passes straight
+through to the function and the `ALLOWED_ORIGIN` allowlist is the single place
+origins are controlled.
+
+**Current deployed endpoint:** `https://dngcc8ftia.execute-api.eu-west-2.amazonaws.com/`
 
 ## 6. Wire the site to it
 
-Three values in the site, all currently placeholders:
-
-| File | Line | Replace |
+| File | Value | Status |
 | --- | --- | --- |
-| `site/js/contact.js` | `ENDPOINT` | the Function URL from step 5 |
-| `site/js/contact.js` | `RECAPTCHA_SITE_KEY` | your reCAPTCHA **site** key |
-| `site/index.html` | the `recaptcha/api.js` script tag | the same site key |
+| `site/js/contact.js` | `ENDPOINT` | ✅ set to the API endpoint above |
+| `site/js/contact.js` | `RECAPTCHA_SITE_KEY` | ❌ still the placeholder |
+| `site/index.html` | the `recaptcha/api.js` script tag | ❌ still the placeholder |
 
 Commit and push — the Pages workflow redeploys the site automatically.
 
 ## 7. Test it
 
-Straight at the function, bypassing the browser:
+Straight at the API, bypassing the browser:
 
 ```bash
-curl -i -X POST https://YOUR-FUNCTION-URL.lambda-url.eu-west-2.on.aws/ \
+curl -i -X POST https://dngcc8ftia.execute-api.eu-west-2.amazonaws.com/ \
   -H "Content-Type: application/json" \
-  -d '{"name":"Test","email":"test@example.com","phone":"+15550100100","projectType":"New website","message":"Testing the pipe."}'
+  -d '{"name":"Test","email":"test@example.com","phone":"+447700900123","projectType":"New website","message":"Testing the pipe."}'
 ```
 
 With `RECAPTCHA_SECRET` set you should get `400 {"error":"Missing spam-check

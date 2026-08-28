@@ -1,12 +1,15 @@
 /**
  * chisl — contact form submission
  *
- * TO CONNECT YOUR BACKEND:
- *   1. Replace ENDPOINT below with your deployed Lambda Function URL
- *      (or API Gateway endpoint) — see /backend/README.md for setup.
- *   2. Replace RECAPTCHA_SITE_KEY below AND in index.html's script tag
- *      with your real reCAPTCHA v3 site key from
- *      https://www.google.com/recaptcha/admin/create
+ * ENDPOINT is live: an API Gateway HTTP API in front of the chisl-contact
+ * Lambda in eu-west-2. (Lambda Function URLs are blocked from anonymous
+ * invocation on this AWS account, so API Gateway fronts it instead — see
+ * /backend/README.md.)
+ *
+ * STILL TO DO: replace RECAPTCHA_SITE_KEY below AND in index.html's script
+ * tag with a real reCAPTCHA v3 site key from
+ * https://www.google.com/recaptcha/admin/create — until then the form
+ * submits with no spam protection at all.
  *
  * The form runs an invisible reCAPTCHA v3 check on every submit and
  * sends the resulting token to the Lambda, which verifies it server-side
@@ -14,7 +17,7 @@
  * SNS charges — bots get rejected before a message is ever published.
  */
 (function () {
-  const ENDPOINT = "https://REPLACE-ME.lambda-url.us-east-1.on.aws/";
+  const ENDPOINT = "https://dngcc8ftia.execute-api.eu-west-2.amazonaws.com/";
   const RECAPTCHA_SITE_KEY = "RECAPTCHA_SITE_KEY";
 
   function getRecaptchaToken() {
@@ -75,9 +78,13 @@
         });
         if (!res.ok) throw new Error(`Server responded ${res.status}`);
         setStatus("ok", "Message sent — we'll get back to you shortly.");
+        // Conversion event. Deliberately after the success check, so only
+        // messages that actually reached the backend get counted.
+        window.chisl?.track("contact_submitted", { project_type: data.projectType || "unspecified" });
         form.reset();
       } catch (err) {
         setStatus("err", "Something went wrong sending that. Try again, or email us directly.");
+        window.chisl?.track("contact_failed", { reason: String(err.message || err).slice(0, 80) });
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = "Send message";
