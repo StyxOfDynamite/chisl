@@ -154,13 +154,32 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .nav-toggle{ display:none; }
 
 @media (max-width: 720px){
+  /* Positioning note: .site-header sets backdrop-filter, which makes it the
+     containing block for its position:fixed descendants — so this panel is
+     positioned against the header box, NOT the viewport. Hence top:100%
+     (immediately below the header) and width:100% (the header spans the
+     viewport) rather than an inset with a hardcoded header height, which
+     collapsed the panel to a sliver and let content show through. */
   .nav-links{
-    position:fixed; inset: 62px 0 0 0; background: var(--bark);
+    position: fixed;
+    top: 100%; left: 0; width: 100%;
+    height: 100vh;   /* fallback for browsers without dynamic viewport units */
+    height: 100dvh;  /* accounts for mobile browser chrome showing/hiding */
+    z-index: 40;
+    background: var(--bark);
     flex-direction:column; padding: 32px var(--gutter); gap: 22px;
-    transform: translateY(-110%); transition: transform .3s ease;
     font-size: 0.95rem;
+    overflow-y: auto;
+    /* Hidden panel must not be reachable by keyboard while offscreen. */
+    visibility: hidden;
+    transform: translateY(-110%);
+    transition: transform .3s ease, visibility 0s linear .3s;
   }
-  .nav-links.open{ transform: translateY(0); }
+  .nav-links.open{
+    visibility: visible;
+    transform: translateY(0);
+    transition: transform .3s ease, visibility 0s;
+  }
   .nav-toggle{
     display:inline-flex; background:none; border:1px solid var(--line-dark);
     color: var(--stone); width:40px; height:40px; align-items:center; justify-content:center;

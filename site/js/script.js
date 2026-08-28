@@ -44,7 +44,9 @@
     // If the viewport grows past the breakpoint while the panel is open,
     // drop the class so the desktop layout isn't left in the open state.
     if (window.matchMedia) {
-      var wide = window.matchMedia("(min-width: 761px)");
+      // Must mirror the stylesheet's max-width: 720px breakpoint, or the
+      // panel can be left in the open state as the layout switches back.
+      var wide = window.matchMedia("(min-width: 721px)");
       var onChange = function (event) {
         if (event.matches) setOpen(false);
       };
