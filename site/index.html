@@ -240,7 +240,12 @@
       </div>
       <button type="submit" class="btn primary">Send message</button>
       <p class="form-status" data-form-status></p>
-      <p class="recaptcha-note">This site is protected by reCAPTCHA. No checkbox, no puzzle — it runs invisibly in the background.</p>
+      <!-- Required wording: the floating reCAPTCHA badge is hidden in CSS, and
+           Google's terms permit that only if this attribution (with both links)
+           is shown in the form. Don't remove it without unhiding the badge. -->
+      <p class="recaptcha-note">This site is protected by reCAPTCHA and the Google
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and
+        <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</p>
     </form>
   </div>
 </section>

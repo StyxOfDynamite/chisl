@@ -397,10 +397,22 @@ section{ padding: clamp(56px,9vw,110px) 0; }
 }
 
 /* ---------- recaptcha disclosure ---------- */
+
+/* Google's floating badge is hidden. Their terms allow this only if the
+   reCAPTCHA attribution appears in the form instead — that's .recaptcha-note
+   below, which must keep its links to Google's privacy policy and terms.
+   visibility rather than display:none, so the widget still measures the page
+   the way it expects to. */
+.grecaptcha-badge{ visibility: hidden; }
+
 .recaptcha-note{
   margin-top: 14px; font-family: var(--font-mono); font-size: 0.72rem;
   color: var(--fog); max-width: 46ch;
 }
+.recaptcha-note a{
+  color: var(--fog); text-decoration: underline; text-underline-offset: 2px;
+}
+.recaptcha-note a:hover{ color: var(--stone); }
 
 /* ---------- footer ---------- */
 .site-footer{
