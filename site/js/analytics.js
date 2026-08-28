@@ -5,9 +5,8 @@
  * file so the measurement ID lives in exactly one place rather than being
  * duplicated across every page's <head>.
  *
- * SETUP: replace MEASUREMENT_ID below with the ID from your GA4 property
- * (Admin → Data streams → your web stream → "Measurement ID", format G-XXXXXXXXXX).
- * Until that's done this file no-ops, so nothing breaks in the meantime.
+ * MEASUREMENT_ID is live and points at the chisl GA4 property. Localhost
+ * traffic is excluded, so developing against the site won't pollute stats.
  *
  * Tracked automatically:
  *   - page_view on every page (gtag does this on config)
@@ -20,7 +19,7 @@
 (function () {
   "use strict";
 
-  var MEASUREMENT_ID = "G-XXXXXXXXXX";
+  var MEASUREMENT_ID = "G-F13K3WC9EW";
 
   /**
    * Run GA4 without setting any cookies.
