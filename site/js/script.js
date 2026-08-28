@@ -28,7 +28,7 @@
     });
 
     // Tapping a link navigates; close the panel so it isn't left open
-    // behind an in-page anchor jump (e.g. index.html#contact).
+    // behind an in-page anchor jump (e.g. /#contact).
     links.addEventListener("click", function (event) {
       if (event.target.closest("a")) setOpen(false);
     });

@@ -4,10 +4,13 @@
 #
 # Why a script rather than a one-liner: `update-function-configuration
 # --environment` REPLACES the whole variable map. Passing just the secret would
-# silently drop TOPIC_ARN, ALLOWED_ORIGIN, SMS_MAX_CHARS and
-# RECAPTCHA_MIN_SCORE — and a missing TOPIC_ARN makes the function return 500
-# on every submission. This reads the current map, merges the secret in, and
-# writes the whole thing back.
+# silently drop TOPIC_ARN, ALLOWED_ORIGIN and RECAPTCHA_MIN_SCORE — and a
+# missing TOPIC_ARN makes the function return 500 on every submission. This
+# reads the current map, merges the secret in, and writes the whole thing back.
+#
+# PROFILE defaults to `styx` (account root) deliberately: reading the current
+# map needs kms:Decrypt, which the `chisl` deploy user is denied. Under the
+# `chisl` profile the read returns null and the merge would wipe the map.
 #
 # The secret is read with `read -s`, so it is never echoed to the terminal and
 # never lands in your shell history.
