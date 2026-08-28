@@ -1,0 +1,6 @@
+# Local download artifact, not part of the project
+files.zip
+
+# Backend build output / local dev deps
+node_modules/
+backend/function.zip

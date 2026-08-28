@@ -1,0 +1,17 @@
+{
+  "name": "chisl-contact-backend",
+  "version": "1.0.0",
+  "description": "Lambda that validates chisl contact-form submissions and publishes them to SNS.",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "package": "zip -r function.zip index.mjs package.json"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-sns": "^3.665.0"
+  }
+}
