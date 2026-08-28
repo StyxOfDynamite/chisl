@@ -43,15 +43,42 @@ The site deploys itself: every push to `main` that touches `site/**` triggers
 the **Actions** tab for progress. You can also trigger a deploy by hand from
 that tab via **Run workflow**.
 
-Two one-time setup steps on the repo:
+## Attaching the chisl.io domain
 
-1. **Settings → Pages → Build and deployment → Source →** select **GitHub Actions**.
-2. **Settings → Pages → Custom domain →** enter `chisl.io`, and tick
-   **Enforce HTTPS** once the certificate finishes provisioning.
+The site currently serves from `https://StyxOfDynamite.github.io/chisl/`. The
+custom domain isn't attached yet because `chisl.io` still points at the
+registrar's parking IP — attaching it before DNS is ready would make the site
+unreachable, since Pages redirects the `github.io` URL to the custom domain.
 
-And point the domain at GitHub Pages in your DNS — apex `A` records to
-`185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`,
-plus a `CNAME` for `www` to `StyxOfDynamite.github.io`.
+Order matters:
+
+1. **Update DNS at Namecheap** (`chisl.io` → Advanced DNS). Four apex `A`
+   records for `@`:
+
+   ```
+   185.199.108.153
+   185.199.109.153
+   185.199.110.153
+   185.199.111.153
+   ```
+
+   Plus a `CNAME` for `www` → `StyxOfDynamite.github.io`.
+
+2. **Wait for propagation** — check with `dig +short chisl.io A` until the
+   GitHub IPs come back.
+
+3. **Add the CNAME file back** and push:
+
+   ```bash
+   echo "chisl.io" > site/CNAME
+   git add site/CNAME && git commit -m "Attach chisl.io custom domain" && git push
+   ```
+
+4. **Tick Enforce HTTPS** in Settings → Pages once the certificate provisions
+   (usually a few minutes, occasionally up to an hour).
+
+All the canonical/`og:url`/sitemap URLs already say `https://chisl.io/`, so no
+other change is needed when the domain lands.
 
 ## Before it's fully production-ready
 

@@ -19,13 +19,13 @@ browser ──POST──▶ Lambda Function URL ──▶ SNS topic ──▶ yo
 - The [AWS CLI](https://aws.amazon.com/cli/) installed and configured (`aws configure`).
 - A Google account, for the reCAPTCHA keys.
 
-Everything below uses `us-east-1`. Swap in another region if you prefer — just
+Everything below uses `eu-west-2`. Swap in another region if you prefer — just
 keep it consistent, and remember the Function URL will carry that region.
 
 ## 1. Create the SNS topic and subscribe to it
 
 ```bash
-aws sns create-topic --name chisl-contact --region us-east-1
+aws sns create-topic --name chisl-contact --region eu-west-2
 ```
 
 Note the `TopicArn` it prints — you'll need it twice below. Then subscribe your
@@ -33,10 +33,10 @@ email address:
 
 ```bash
 aws sns subscribe \
-  --topic-arn arn:aws:sns:us-east-1:YOUR-ACCOUNT-ID:chisl-contact \
+  --topic-arn arn:aws:sns:eu-west-2:YOUR-ACCOUNT-ID:chisl-contact \
   --protocol email \
   --notification-endpoint hello@chisl.io \
-  --region us-east-1
+  --region eu-west-2
 ```
 
 AWS sends a confirmation email. **Click the confirm link** — until you do, the
@@ -81,7 +81,7 @@ aws iam put-role-policy \
     "Statement": [{
       "Effect": "Allow",
       "Action": "sns:Publish",
-      "Resource": "arn:aws:sns:us-east-1:YOUR-ACCOUNT-ID:chisl-contact"
+      "Resource": "arn:aws:sns:eu-west-2:YOUR-ACCOUNT-ID:chisl-contact"
     }]
   }'
 ```
@@ -106,7 +106,7 @@ aws lambda create-function \
   --role arn:aws:iam::YOUR-ACCOUNT-ID:role/chisl-contact-role \
   --zip-file fileb://function.zip \
   --timeout 10 \
-  --region us-east-1
+  --region eu-west-2
 ```
 
 Then set the environment variables:
@@ -114,9 +114,9 @@ Then set the environment variables:
 ```bash
 aws lambda update-function-configuration \
   --function-name chisl-contact \
-  --region us-east-1 \
+  --region eu-west-2 \
   --environment "Variables={
-    TOPIC_ARN=arn:aws:sns:us-east-1:YOUR-ACCOUNT-ID:chisl-contact,
+    TOPIC_ARN=arn:aws:sns:eu-west-2:YOUR-ACCOUNT-ID:chisl-contact,
     RECAPTCHA_SECRET=your-recaptcha-secret-key,
     RECAPTCHA_MIN_SCORE=0.5,
     ALLOWED_ORIGIN=https://chisl.io
@@ -136,7 +136,7 @@ aws lambda update-function-configuration \
 aws lambda create-function-url-config \
   --function-name chisl-contact \
   --auth-type NONE \
-  --region us-east-1
+  --region eu-west-2
 
 aws lambda add-permission \
   --function-name chisl-contact \
@@ -144,11 +144,11 @@ aws lambda add-permission \
   --action lambda:InvokeFunctionUrl \
   --principal "*" \
   --function-url-auth-type NONE \
-  --region us-east-1
+  --region eu-west-2
 ```
 
 The first command prints a `FunctionUrl` like
-`https://abc123....lambda-url.us-east-1.on.aws/`. That's the endpoint the site
+`https://abc123....lambda-url.eu-west-2.on.aws/`. That's the endpoint the site
 needs.
 
 `--auth-type NONE` makes the URL publicly callable — which it has to be, since
@@ -172,7 +172,7 @@ Commit and push — the Pages workflow redeploys the site automatically.
 Straight at the function, bypassing the browser:
 
 ```bash
-curl -i -X POST https://YOUR-FUNCTION-URL.lambda-url.us-east-1.on.aws/ \
+curl -i -X POST https://YOUR-FUNCTION-URL.lambda-url.eu-west-2.on.aws/ \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","email":"test@example.com","phone":"+15550100100","projectType":"New website","message":"Testing the pipe."}'
 ```
@@ -192,7 +192,7 @@ npm run package
 aws lambda update-function-code \
   --function-name chisl-contact \
   --zip-file fileb://function.zip \
-  --region us-east-1
+  --region eu-west-2
 ```
 
 ## Troubleshooting
@@ -203,4 +203,4 @@ aws lambda update-function-code \
   the site key and secret key are from different reCAPTCHA registrations.
 - **502 "Could not send notification"** — the role can't publish. Check the
   topic ARN in the inline policy matches `TOPIC_ARN`.
-- **Anything else** — `aws logs tail /aws/lambda/chisl-contact --follow --region us-east-1`.
+- **Anything else** — `aws logs tail /aws/lambda/chisl-contact --follow --region eu-west-2`.
