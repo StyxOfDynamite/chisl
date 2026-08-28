@@ -1,16 +1,20 @@
 # chisl contact-form backend
 
-A single Lambda function. The static site POSTs the contact form as JSON, the
-function verifies the reCAPTCHA token and publishes the submission to an SNS
-topic, and SNS emails it to you. No database, no API Gateway, no server.
+A single Lambda function behind an API Gateway HTTP API. The static site POSTs
+the contact form as JSON, the function verifies the reCAPTCHA token and
+publishes the submission to an SNS topic, and SNS fans it out to email and SMS.
+No database, no server.
 
 Cost at low volume is effectively zero: Lambda's free tier covers a million
-requests a month, and SNS email notifications are free for the first thousand.
+requests a month, API Gateway is ~$1 per million, and SNS email is free for the
+first thousand. SMS is the only real line item — see the note in step 1.
 
 ```
-browser ──POST──▶ Lambda Function URL ──▶ SNS topic ──▶ your inbox
-                        │
-                        └──▶ Google reCAPTCHA (verify, server-side)
+                                                    ┌──▶ email (full submission)
+browser ──POST──▶ API Gateway ──▶ Lambda ──▶ SNS ───┤
+                                    │               └──▶ SMS (capped, 2 segments)
+                                    │
+                                    └──▶ Google reCAPTCHA (verify, server-side)
 ```
 
 ## What you need before starting
@@ -20,7 +24,7 @@ browser ──POST──▶ Lambda Function URL ──▶ SNS topic ──▶ yo
 - A Google account, for the reCAPTCHA keys.
 
 Everything below uses `eu-west-2`. Swap in another region if you prefer — just
-keep it consistent, and remember the Function URL will carry that region.
+keep it consistent, and remember the API endpoint will carry that region.
 
 ## 1. Create the SNS topic and subscribe to it
 
@@ -41,6 +45,32 @@ aws sns subscribe \
 
 AWS sends a confirmation email. **Click the confirm link** — until you do, the
 subscription stays pending and messages go nowhere.
+
+### SMS
+
+```bash
+aws sns subscribe \
+  --topic-arn arn:aws:sns:eu-west-2:YOUR-ACCOUNT-ID:chisl-contact \
+  --protocol sms \
+  --notification-endpoint +447700900123 \
+  --region eu-west-2
+```
+
+Two things gate SMS:
+
+- **The SMS sandbox.** New accounts start in it, and it only delivers to
+  verified numbers. That's fine here — you're only ever texting yourself.
+  Register the number with `aws sns create-sms-sandbox-phone-number`, then
+  confirm the OTP with `aws sns verify-sms-sandbox-phone-number`. Check which
+  state you're in with `aws sns get-sms-sandbox-account-status`.
+- **The monthly spend limit**, `MonthlySpendLimit`, defaults to **$1**. At UK
+  transactional rates (~$0.03/segment) and a 2-segment cap that's roughly 16
+  inquiries a month, after which **SMS silently stops while email keeps
+  working**. Raising it above $1 needs an AWS Support request.
+
+```bash
+aws sns get-sms-attributes --region eu-west-2   # check the current limit
+```
 
 ## 2. Get reCAPTCHA v3 keys
 
