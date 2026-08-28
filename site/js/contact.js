@@ -6,10 +6,9 @@
  * invocation on this AWS account, so API Gateway fronts it instead — see
  * /backend/README.md.)
  *
- * STILL TO DO: replace RECAPTCHA_SITE_KEY below AND in index.html's script
- * tag with a real reCAPTCHA v3 site key from
- * https://www.google.com/recaptcha/admin/create — until then the form
- * submits with no spam protection at all.
+ * RECAPTCHA_SITE_KEY is the real v3 site key, and matches the one in
+ * index.html's script tag. Site keys are public by design — the secret half
+ * lives only in the Lambda's RECAPTCHA_SECRET environment variable.
  *
  * The form runs an invisible reCAPTCHA v3 check on every submit and
  * sends the resulting token to the Lambda, which verifies it server-side
@@ -18,7 +17,7 @@
  */
 (function () {
   const ENDPOINT = "https://dngcc8ftia.execute-api.eu-west-2.amazonaws.com/";
-  const RECAPTCHA_SITE_KEY = "RECAPTCHA_SITE_KEY";
+  const RECAPTCHA_SITE_KEY = "6Lfftp0tAAAAACv6UYDCGWQ0KlnfiiL8AlfFdE-X";
 
   function getRecaptchaToken() {
     return new Promise((resolve, reject) => {
